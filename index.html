@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="支持三存档、WebSocket 联机、创造模式和超远分层体素视距的浏览器沙盒。">
+  <title>Voxel Link Demo</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2710%27 fill=%27%235ea342%27/%3E%3Cpath d=%27M8 28h48v28H8z%27 fill=%27%237a5838%27/%3E%3Cpath d=%27M8 28l8-8h32l8 8z%27 fill=%27%2379bd55%27/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <canvas id="game-canvas" aria-label="体素游戏画面"></canvas>
+
+  <div id="loading" class="overlay loading-overlay">
+    <div class="panel compact-panel">
+      <h1>Voxel Link Demo</h1>
+      <p id="loading-text">正在初始化渲染器……</p>
+      <div class="progress"><span id="loading-progress"></span></div>
+      <pre id="loading-details" class="loading-details hidden"></pre>
+      <div id="loading-actions" class="button-row hidden">
+        <button id="loading-reload" class="primary" type="button">重新加载</button>
+        <button id="loading-safe" type="button">安全模式重载</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="menu" class="overlay hidden">
+    <section class="panel menu-panel">
+      <header>
+        <p class="eyebrow">HTML · Three.js · WebSocket</p>
+        <h1>Voxel Link Demo</h1>
+        <p>单机可直接运行；房主启动本地服务器后，可通过 SakuraFrp 邀请最多 4 人加入。</p>
+      </header>
+
+      <div class="form-grid">
+        <label>
+          玩家名称
+          <input id="player-name" maxlength="16" autocomplete="nickname" value="Player_1">
+        </label>
+        <label>
+          单机存档槽
+          <select id="save-slot">
+            <option value="1">存档 1</option>
+            <option value="2">存档 2</option>
+            <option value="3">存档 3</option>
+          </select>
+        </label>
+        <label>
+          世界名称
+          <input id="world-name" maxlength="24" value="新的世界" placeholder="新的世界">
+        </label>
+        <label>
+          新世界种子
+          <input id="seed-input" inputmode="numeric" placeholder="已有存档会忽略；留空随机">
+        </label>
+        <div class="save-summary span-2" id="save-slot-summary" aria-live="polite"></div>
+        <label class="span-2">
+          服务器地址
+          <input id="server-address" spellcheck="false" placeholder="wss://example.com/ws">
+        </label>
+        <label>
+          服务器密码
+          <input id="server-password" type="password" autocomplete="current-password" placeholder="可留空">
+        </label>
+        <label>
+          初始游戏模式
+          <select id="game-mode">
+            <option value="survival" selected>生存模式</option>
+            <option value="creative">创造模式</option>
+          </select>
+        </label>
+        <label>
+          近景高细节体素视距
+          <select id="near-distance">
+            <option value="8">8 区块（低配）</option>
+            <option value="12">12 区块（均衡）</option>
+            <option value="16" selected>16 区块（推荐）</option>
+            <option value="24">24 区块（高细节环）</option>
+            <option value="32">32 区块（高性能）</option>
+            <option value="48">48 区块（极高）</option>
+            <option value="64">64 区块（实验极限）</option>
+          </select>
+        </label>
+        <label>
+          超远体素 LOD 视距
+          <select id="far-distance">
+            <option value="256">256 区块</option>
+            <option value="512">512 区块</option>
+            <option value="1024" selected>1024 区块（推荐）</option>
+            <option value="1536">1536 区块（极高）</option>
+            <option value="2048">2048 区块（实验极限）</option>
+          </select>
+        </label>
+        <p class="setting-note span-2">性能说明：8～16 区块保留最大的完整方块核心；更高选项会扩大带像素纹理、树木轮廓和方块侧壁的高细节宏体素环，而不是在内存中同时保存数万份 256 高完整区块。</p>
+        <label class="span-2">
+          内置光影预设
+          <select id="visual-preset">
+            <option value="classic">原版像素（性能优先）</option>
+            <option value="soft" selected>柔和光影（推荐）</option>
+            <option value="cinematic">电影高对比（高负载）</option>
+            <option value="dream">极光梦境</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="button-row">
+        <button id="singleplayer-button" class="primary">进入 / 创建选中存档</button>
+        <button id="delete-save-button" class="danger">删除选中存档</button>
+        <button id="join-button">加入服务器</button>
+        <button id="status-button" class="secondary">检查服务器</button>
+      </div>
+      <p id="menu-status" class="status" aria-live="polite"></p>
+
+      <details>
+        <summary>控制说明与技术边界</summary>
+        <div class="help-grid">
+          <p><b>移动：</b>WASD；空格跳跃；Ctrl 或双击 W 疾跑；按住 Shift 下蹲并防止跌落。</p>
+          <p><b>创造：</b>C 切换模式；双击空格飞行；飞行时空格或 R 上升、Shift 下降、Ctrl 加速；R 可避开 Windows 输入法占用 Ctrl+Space。</p>
+          <p><b>交互：</b>左键挖掘；右键放置；滚轮或 1～8 选择方块。</p>
+          <p><b>界面：</b>E 打开背包/创造物品页和时间控制；Enter 聊天；Tab 玩家列表；F3 调试；F4 切换光影；Esc 释放鼠标。</p>
+          <p><b>远景：</b>采用分阶段四叉树宏体素：先显示完整粗远景，再逐级细化；父级在子级完整前持续兜底。1024 区块仍不是完整 1:1 方块加载。</p>
+          <p><b>存档：</b>单机最多三个存档槽；保存种子、位置、模式、时间和玩家修改过的方块。</p>
+        </div>
+      </details>
+    </section>
+  </div>
+
+  <div id="pause" class="overlay hidden">
+    <section class="panel compact-panel">
+      <h2>已暂停</h2>
+      <p>点击继续并重新锁定鼠标。</p>
+      <div class="button-row vertical">
+        <button id="resume-button" class="primary">继续游戏</button>
+        <button id="mode-button">切换生存 / 创造</button>
+        <button id="visual-button">切换光影预设</button>
+        <button id="invite-button">复制邀请链接</button>
+        <button id="leave-button" class="danger">返回主菜单</button>
+      </div>
+      <p id="pause-status" class="status" aria-live="polite"></p>
+    </section>
+  </div>
+
+
+  <div id="inventory" class="overlay inventory-overlay hidden">
+    <section class="panel inventory-panel" aria-label="背包与物品页面">
+      <div class="inventory-layout">
+        <aside class="time-control">
+          <h2>世界时间</h2>
+          <p>单机可直接调整；联机需处于创造模式。</p>
+          <div class="time-presets">
+            <button type="button" data-time="0.23">日出</button>
+            <button type="button" data-time="0.50">正午</button>
+            <button type="button" data-time="0.73">日落</button>
+            <button type="button" data-time="0.00">午夜</button>
+          </div>
+          <label for="time-slider">时间刻度</label>
+          <input id="time-slider" type="range" min="0" max="1" step="0.002" value="0.28">
+          <output id="time-label" for="time-slider">06:43</output>
+          <div class="inventory-help">
+            <b>操作</b>
+            <span>E 关闭</span>
+            <span>点击物品选择快捷栏</span>
+            <span>Shift：下蹲</span>
+          </div>
+        </aside>
+        <main class="inventory-main">
+          <header class="inventory-header">
+            <div>
+              <p class="eyebrow">E · INVENTORY</p>
+              <h1 id="inventory-title">生存背包</h1>
+              <p id="inventory-description">挖掘获得方块，放置时消耗库存。</p>
+            </div>
+            <button id="inventory-close" type="button" aria-label="关闭背包">关闭 E</button>
+          </header>
+          <label class="inventory-search-label">
+            搜索物品
+            <input id="inventory-search" type="search" placeholder="输入物品名称">
+          </label>
+          <div id="inventory-grid" class="inventory-grid" aria-live="polite"></div>
+        </main>
+      </div>
+    </section>
+  </div>
+
+  <div id="hud" class="hidden" aria-hidden="true">
+    <div id="crosshair" aria-hidden="true"></div>
+    <div id="debug"></div>
+    <div id="hearts" aria-label="生命值"></div>
+    <div id="hotbar" aria-label="快捷栏"></div>
+    <div id="target-label"></div>
+    <div class="badge-stack">
+      <div id="connection-badge">单机</div>
+      <div id="mode-badge">生存</div>
+      <div id="visual-badge">柔和光影</div>
+      <div id="stream-badge" class="hidden">远景载入</div>
+    </div>
+  </div>
+
+  <aside id="player-list" class="player-list hidden">
+    <h2>玩家</h2>
+    <div id="player-list-body"></div>
+  </aside>
+
+  <section id="chat" class="chat hidden" aria-label="聊天">
+    <div id="chat-log" aria-live="polite"></div>
+    <input id="chat-input" maxlength="200" placeholder="输入消息，Enter 发送，Esc 取消">
+  </section>
+
+  <div id="toast" class="toast hidden" aria-live="polite"></div>
+
+  <script>
+    (() => {
+      const loading = document.getElementById('loading');
+      const text = document.getElementById('loading-text');
+      const details = document.getElementById('loading-details');
+      const actions = document.getElementById('loading-actions');
+      const showFailure = (title, error) => {
+        if (!loading) return;
+        loading.classList.remove('hidden');
+        document.getElementById('menu')?.classList.add('hidden');
+        document.getElementById('pause')?.classList.add('hidden');
+        document.getElementById('hud')?.classList.add('hidden');
+        text.textContent = title;
+        details.textContent = String(error?.stack || error?.message || error || '未知错误');
+        details.classList.remove('hidden');
+        actions.classList.remove('hidden');
+      };
+      window.__voxelLinkShowFailure = showFailure;
+      window.addEventListener('error', (event) => showFailure('初始化失败。', event.error || event.message));
+      window.addEventListener('unhandledrejection', (event) => showFailure('初始化失败。', event.reason));
+      document.getElementById('loading-reload').addEventListener('click', () => location.reload());
+      document.getElementById('loading-safe').addEventListener('click', () => {
+        sessionStorage.setItem('voxel-link-safe-mode', '1');
+        location.reload();
+      });
+      setTimeout(() => {
+        if (!loading.classList.contains('hidden')) {
+          showFailure('初始化耗时过长。', '可能是 Three.js CDN 无法访问、浏览器扩展拦截模块，或显卡 WebGL 上下文异常。可先尝试“安全模式重载”。');
+        }
+      }, 25000);
+    })();
+  </script>
+  <script type="module" src="./src/main.js?v=0.6.3"></script>
+</body>
+</html>
