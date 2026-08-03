@@ -34,9 +34,9 @@ py -m http.server 8080
 
 Open `http://127.0.0.1:8080/`. **Do not double-click `index.html` directly** — ES modules and Web Workers require an `http://` origin.
 
-### GitHub Pages
+### Play Online
 
-The repository is fully static-hostable. In Settings → Pages choose `main / (root)`; once published it is available at `namiyau.github.io/voxel-link-client`.
+Deployed to GitHub Pages: [namiyau.github.io/voxel-link-client](https://namiyau.github.io/voxel-link-client/)
 
 ## Multiplayer
 

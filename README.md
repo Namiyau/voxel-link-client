@@ -34,9 +34,9 @@ py -m http.server 8080
 
 访问 `http://127.0.0.1:8080/`。**不要直接双击 `index.html`**（ES 模块与 Worker 依赖 http 协议）。
 
-### GitHub Pages
+### 在线试玩
 
-本仓库可静态托管。在 Settings → Pages 选择 `main / (root)` 即可；发布后访问对应的 `namiyau.github.io/voxel-link-client`。
+已部署到 GitHub Pages：[namiyau.github.io/voxel-link-client](https://namiyau.github.io/voxel-link-client/)
 
 ## 联机
 

@@ -34,9 +34,9 @@ py -m http.server 8080
 
 ブラウザで `http://127.0.0.1:8080/` を開いてください。**`index.html` を直接ダブルクリックしないでください**（ESモジュールとWorkerは http 由来が必要です）。
 
-### GitHub Pages
+### オンラインでプレイ
 
-このリポジトリは静的ホスティングに対応しています。Settings → Pages で `main / (root)` を選べば、`namiyau.github.io/voxel-link-client` で公開されます。
+GitHub Pages にデプロイ済み：[namiyau.github.io/voxel-link-client](https://namiyau.github.io/voxel-link-client/)
 
 ## マルチプレイ
 
