@@ -1,6 +1,8 @@
+const LOCAL_SOURCE = new URL('../vendor/three.module.min.js', import.meta.url).href;
 const SOURCES = [
-  'https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.module.js',
-  'https://unpkg.com/three@0.185.1/build/three.module.js?module',
+  LOCAL_SOURCE,
+  'https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.module.min.js',
+  'https://unpkg.com/three@0.185.1/build/three.module.min.js?module',
   'https://esm.sh/three@0.185.1',
 ];
 
@@ -29,7 +31,8 @@ let namespace = null;
 const failures = [];
 for (let index = 0; index < SOURCES.length; index += 1) {
   const url = SOURCES[index];
-  updateStatus(`正在加载 Three.js 引擎（线路 ${index + 1}/${SOURCES.length}）……`);
+  const local = url === LOCAL_SOURCE;
+  updateStatus(local ? '正在加载本地 Three.js 引擎……' : `正在加载 Three.js 引擎（线路 ${index}/${SOURCES.length - 1}）……`);
   try {
     namespace = await importWithTimeout(url);
     globalThis.__VOXEL_LINK_THREE_SOURCE__ = url;

@@ -1,5 +1,6 @@
-import THREE from './three.js';
+import THREE from './three-loader.js';
 import { horizontalVelocity } from '../shared/movement.js';
+import { loadSettings } from './settings.js';
 
 const STANDING_HEIGHT = 1.8;
 const CROUCH_HEIGHT = 1.5;
@@ -33,14 +34,20 @@ export class LocalPlayer extends EventTarget {
     this.crouchBlend = 0;
     this.gameMode = 'survival';
     this.flying = false;
+    const savedSensitivity = Number(loadSettings().sensitivity) || 1;
+    this.sensitivity = Math.max(0.25, Math.min(4, savedSensitivity));
     this._bind();
+  }
+
+  setSensitivity(value) {
+    this.sensitivity = Math.max(0.25, Math.min(4, Number(value) || 1));
   }
 
   _bind() {
     document.addEventListener('mousemove', (event) => {
       if (!this.enabled || document.pointerLockElement !== this.canvas) return;
-      this.yaw -= event.movementX * 0.0022;
-      this.pitch -= event.movementY * 0.0022;
+      this.yaw -= event.movementX * 0.0022 * this.sensitivity;
+      this.pitch -= event.movementY * 0.0022 * this.sensitivity;
       this.pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, this.pitch));
     });
     document.addEventListener('keydown', (event) => {

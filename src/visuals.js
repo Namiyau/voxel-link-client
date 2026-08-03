@@ -1,4 +1,4 @@
-import THREE from './three.js';
+import THREE from './three-loader.js';
 
 export const VISUAL_PRESETS = Object.freeze({
   classic: {

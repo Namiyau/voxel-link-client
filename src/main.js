@@ -1,15 +1,16 @@
-import THREE from './three.js';
+import THREE from './three-loader.js';
 import { DEFAULT_SERVER, CLIENT_DEFAULTS } from '../config.js';
 import { BLOCK, BLOCK_NAMES, PLACEABLE_BLOCKS, WORLD_HEIGHT } from '../shared/constants.js';
 import { GENERATOR_VERSION, terrainInfo } from '../shared/worldgen.js';
 import { createMaterials } from './materials.js';
 import { InventoryState } from './inventory.js';
-import { NetworkClient, normalizeWsUrl } from './network.js';
+import { NetworkClient, normalizeWsUrl, MAX_RECONNECT_ATTEMPTS } from './network.js';
 import { LocalPlayer, RemotePlayers } from './player.js';
 import { GameUI } from './ui.js';
 import { VisualSystem, VISUAL_PRESETS } from './visuals.js';
 import { VoxelWorld } from './world.js';
 import { deleteSaveSlot, loadSaveSlot, saveSaveSlot } from './save-slots.js';
+import { loadSettings, saveSettings } from './settings.js';
 
 const canvas = document.getElementById('game-canvas');
 const ui = new GameUI();
@@ -151,11 +152,16 @@ function initializeDefaults() {
     ? `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`
     : '';
   ui.setServerAddress(queryServer || DEFAULT_SERVER || sameOriginServer);
-  if (queryName) document.getElementById('player-name').value = queryName.slice(0, 16);
+  const saved = loadSettings();
+  if (queryName) {
+    document.getElementById('player-name').value = queryName.slice(0, 16);
+  } else if (saved.name) {
+    document.getElementById('player-name').value = String(saved.name).slice(0, 16);
+  }
   const defaults = safeModeActive
     ? { ...CLIENT_DEFAULTS, nearDistance: 8, farDistance: 256, visualPreset: 'classic' }
-    : CLIENT_DEFAULTS;
-  ui.setDefaults(defaults);
+    : { ...CLIENT_DEFAULTS, ...saved };
+  ui.setDefaults({ ...defaults, singleplayerSlot: defaults.saveSlot });
   applyVisualPreset(defaults.visualPreset, false);
   ui.updateGameMode(defaults.gameMode, false);
   refreshSaveSummary();
@@ -173,7 +179,9 @@ function wireUI() {
   ui.addEventListener('invite', copyInviteLink);
   ui.addEventListener('modecycle', () => {
     if (!gameActive) return;
-    setGameMode(gameMode === 'creative' ? 'survival' : 'creative', { send: true, announce: true });
+    const next = gameMode === 'creative' ? 'survival' : 'creative';
+    setGameMode(next, { send: true, announce: true });
+    saveSettings({ gameMode: next });
   });
   ui.addEventListener('visualcycle', () => {
     if (!gameActive) return;
@@ -181,6 +189,7 @@ function wireUI() {
     visualPreset = preset.id;
     ui.updateVisual(preset.name);
     ui.toast(`光影：${preset.name}`);
+    saveSettings({ visualPreset: preset.id });
   });
   ui.addEventListener('chat', (event) => {
     if (multiplayer) network.chat(event.detail);
@@ -282,8 +291,44 @@ function wireNetwork() {
   });
   network.addEventListener('server_closing', () => ui.toast('服务器正在关闭并保存世界。'));
   network.addEventListener('disconnect', (event) => {
-    if (gameActive && multiplayer && event.detail.wasReady) {
-      ui.toast('与服务器的连接已断开。', 5000);
+    if (!gameActive || !multiplayer || !event.detail.wasReady) return;
+    ui.toast('与服务器的连接已断开，正在自动重连……', 6000);
+  });
+  network.addEventListener('reconnecting', (event) => {
+    if (!gameActive || !multiplayer) return;
+    const { attempt } = event.detail;
+    ui.toast(`连接中断，正在重连（${attempt}/${MAX_RECONNECT_ATTEMPTS}）……`, 6000);
+  });
+  network.addEventListener('reconnected', (event) => {
+    if (!gameActive || !multiplayer) return;
+    const welcome = event.detail;
+    if (welcome.seed !== undefined && welcome.seed !== world.seed) {
+      ui.toast('服务器世界已更换，正在退出联机。', 5000);
+      leaveGame();
+      return;
+    }
+    ownId = welcome.id;
+    remoteSnapshot = [
+      {
+        id: ownId,
+        name: ownName,
+        position: welcome.spawn,
+        yaw: 0,
+        pitch: 0,
+        health: 20,
+        gameMode: welcome.gameMode,
+        flying: false,
+      },
+      ...welcome.players,
+    ];
+    remotes.clear();
+    remotes.updateSnapshot(remoteSnapshot, ownId);
+    ui.updatePlayerList(remoteSnapshot);
+    ui.toast('已重新连接服务器。', 4000);
+  });
+  network.addEventListener('reconnect_failed', () => {
+    if (gameActive && multiplayer) {
+      ui.toast('自动重连失败，已返回主菜单。', 5000);
       leaveGame();
     }
   });
@@ -315,6 +360,14 @@ function wireInput() {
 async function startSingleplayer() {
   const values = ui.values();
   if (!validName(values.name)) return ui.setMenuStatus('名称需为 2～16 个中文、英文、数字或下划线字符。', true);
+  saveSettings({
+    name: values.name,
+    saveSlot: values.saveSlot,
+    nearDistance: values.nearDistance,
+    farDistance: values.farDistance,
+    gameMode: values.gameMode,
+    visualPreset: values.visualPreset,
+  });
   ownName = values.name;
   multiplayer = false;
   ownId = 'local';
@@ -366,6 +419,13 @@ async function joinServer() {
   catch (error) { return ui.setMenuStatus(error.message, true); }
   ui.setMenuStatus('正在连接服务器……');
   try {
+    saveSettings({
+      name: values.name,
+      nearDistance: values.nearDistance,
+      farDistance: values.farDistance,
+      gameMode: values.gameMode,
+      visualPreset: values.visualPreset,
+    });
     const welcome = await network.connect(url, values.name, values.password, values.gameMode);
     ownName = values.name;
     ownId = welcome.id;

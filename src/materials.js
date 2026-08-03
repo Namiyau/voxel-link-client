@@ -1,4 +1,4 @@
-import THREE from './three.js';
+import THREE from './three-loader.js';
 import { BLOCK } from '../shared/constants.js';
 
 const TILE = 16;
